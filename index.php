@@ -1,37 +1,47 @@
 <?php
 
 require_once "vendor/autoload.php";
+require_once "util.php";
 
 use GifCreator\GifCreator;
-use Goutte\Client;
 use GuzzleHttp\Client as GuzzleClient;
 use GuzzleHttp\Message\ResponseInterface;
 
+
 $valid_radars = ["wuj","xpg","xss","xsi","xbe","whk","xfw","xra","xbu","www","xsm","xwl","whn","wbi","xdr","wso","xft","wkr","wgj","xti","xni","xla","wmn","xam","wvy","wmb","xnc","xgo","wtp","xme","xmb","can","pac","wrn","ont","que","ern"];
 
-if (!empty($_GET['id']) && in_array($_GET['id'], $valid_radars)) {
-	$RADAR_ID = $_GET['id'];
-} else {
-	$RADAR_ID = 'xft';
+$RADAR_ID = request_param('id', $valid_radars, 'xft');
+$RADAR_TYPE = request_param('type', ['short', 'long'], 'short');
+
+
+$client = new GuzzleClient();
+
+$resp = $client->get('http://weather.gc.ca/radar/xhr.php', [
+	'headers' => [
+		'X-Requested-With' => 'XMLHttpRequest'
+	],
+	'query' => [
+		'action' => 'retrieve',
+		'target' => 'images',
+		'region' => strtoupper($RADAR_ID),
+		'product' => 'precip_rain',
+		'lang' => 'en-CA',
+		'format' => 'json',
+		'rand' => rand() / getrandmax(),
+	]
+])->json();
+
+if (empty($resp[$RADAR_TYPE])) {
+	response_error(416, 'No data for radar type: '. $RADAR_TYPE);
 }
 
-$client = new Client();
-$crawler = $client->request('GET', 'http://weather.gc.ca/radar/index_e.html?id='.$RADAR_ID);
+$frameData = $resp[$RADAR_TYPE];
+$initialTimestamp = $frameData[0]['timestamp'];
+$requestId = implode(compact('RADAR_ID', 'RADAR_TYPE', 'initialTimestamp'), '_');
 
-
-$links = $crawler->filter('.image-list-ol > li > a')->each(function (\Symfony\Component\DomCrawler\Crawler $node) {
-		$parsed_url =  parse_url($node->attr('href'));
-		parse_str($parsed_url["query"], $parsed_url["query"]);
-		return $parsed_url;
-});
-
-$links = array_filter($links, function ($link) {
-	return $link["query"]["duration"] == "short";
-});
-
-$links = array_map(function ($link) use ($RADAR_ID) {
+$links = array_map(function ($fd) use ($RADAR_ID) {
 	$query = [
-		"base" => $link["query"]["display"],
+		"base" => $fd['src'],
 		"overlays" => [
 			"/cacheable/images/radar/layers_detailed/roads/".strtoupper($RADAR_ID)."_roads.gif",
 			"/cacheable/images/radar/layers_detailed/radar_circle/radar_circle.gif",
@@ -41,30 +51,27 @@ $links = array_map(function ($link) use ($RADAR_ID) {
 
 	$query = urldecode(http_build_query($query));
 	return "http://weather.gc.ca/radar/image.php?". $query;
-}, $links);
+}, $frameData);
 
-
-$guzzleClient = new GuzzleClient();
 
 $requests = [];
 foreach ($links as $idx => $link) {
-	$req = $guzzleClient->createRequest("GET", $link);
+	$req = $client->createRequest("GET", $link);
 	$req->getQuery()->setEncodingType(false);
 	$requests[] = $req;
 }
 
-$results = GuzzleHttp\batch($guzzleClient, $requests);
+$results = GuzzleHttp\batch($client, $requests);
 $frames = [];
 
 foreach ($results as $request) {
 	$result = $results[$request];
 	if ($result instanceof ResponseInterface) {
-		$frames[] = imagecreatefromstring($result->getBody());
+		$frames[] = imagecreatefromstring($result->getBody()->getContents());
 	} else {
 	}
 }
 
-$frames = array_reverse($frames);
 $count = count($frames);
 
 if ($count) {
@@ -82,7 +89,7 @@ if ($count) {
 	$gifBinary = $gc->getGif();
 
 	header('Content-type: image/gif');
-	header('Content-Disposition: filename="'. $RADAR_ID .'_radar.gif"');
+	header('Content-Disposition: filename="'. $requestId .'_radar.gif"');
 	print $gifBinary;
 } else {
 	http_response_code(416);

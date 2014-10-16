@@ -1,7 +1,6 @@
 {
     "require": {
-        "guzzlehttp/guzzle": "~4",
-        "fabpot/goutte": "~2.0",
+        "guzzlehttp/guzzle": "~4.2",
         "sybio/gif-creator": "~1.0"
     }
 }
