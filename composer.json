@@ -1,6 +1,7 @@
 {
     "require": {
-        "guzzlehttp/guzzle": "~4.2",
-        "sybio/gif-creator": "~1.0"
+        "guzzlehttp/guzzle": "~6.0",
+        "sybio/gif-creator": "~1.0",
+        "sybio/image-workshop": "^2.0"
     }
 }
