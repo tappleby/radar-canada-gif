@@ -9,7 +9,7 @@ class RadarClient {
   protected $client;
 
   public function __construct($radar_id) {
-    $this->client = new GuzzleClient(['base_uri' => 'http://weather.gc.ca']);
+    $this->client = new GuzzleClient(['base_uri' => 'https://weather.gc.ca']);
     $this->radar_id = $radar_id;
   }
 
